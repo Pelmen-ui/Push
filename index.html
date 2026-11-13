@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>War</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #0d1012;
+            font-family: 'Consolas', 'Courier New', monospace;
+            color: #e6ece8;
+        }
+        #viewport {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+        }
+        #loading-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            background: #080a0c;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            transition: opacity 0.25s ease;
+        }
+        .load-bar-wrap {
+            width: 180px;
+            max-width: 60vw;
+            height: 1px;
+            background: rgba(255, 255, 255, 0.12);
+            overflow: hidden;
+        }
+        #loading-bar-fill {
+            width: 0%;
+            height: 100%;
+            background: #e2e8f0;
+            transition: width 0.08s ease;
+        }
+        #loading-status-text {
+            font-size: 10px;
+            font-weight: 600;
+            color: #64748b;
+            letter-spacing: 2.5px;
+            text-transform: uppercase;
+        }
+        #start-panel {
+            position: fixed;
+            inset: 0;
+            z-index: 90;
+            background: rgba(9, 12, 15, 0.86);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 22px;
+        }
+        .brief-box {
+            width: 760px;
+            max-width: 94vw;
+            background: rgba(18, 24, 29, 0.96);
+            border: 1px solid #394854;
+            padding: 28px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75);
+        }
+        .brief-header {
+            font-size: 21px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            margin-bottom: 14px;
+            color: #ffffff;
+            border-bottom: 1px solid #2e3b46;
+            padding-bottom: 10px;
+        }
+        .brief-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px 18px;
+            font-size: 13px;
+            color: #b7c4ce;
+            margin-bottom: 22px;
+            line-height: 1.6;
+        }
+        .faction-buttons {
+            display: flex;
+            gap: 16px;
+        }
+        .btn-faction {
+            flex: 1;
+            padding: 15px 18px;
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            cursor: pointer;
+            border: 1px solid #374753;
+            background: #182026;
+            color: #ffffff;
+            transition: transform 0.1s ease, background 0.15s ease, border-color 0.15s ease;
+        }
+        .btn-faction:hover {
+            background: #25333d;
+            border-color: #556c7d;
+            transform: translateY(-2px);
+        }
+        #hud-layer {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 20;
+        }
+        #crosshair {
+            display: none !important;
+        }
+        #hit-marker {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            transform: translate(-50%, -50%) scale(0.9);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.06s ease, transform 0.06s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+        }
+        .hit-body {
+            border: 2px solid rgba(255, 255, 255, 0.95);
+            box-shadow: 0 0 4px rgba(255, 255, 255, 0.6);
+            transform: translate(-50%, -50%) scale(1.05) !important;
+        }
+        .hit-head {
+            border: 2px solid #ff3333;
+            box-shadow: 0 0 8px #ff2222, inset 0 0 4px #ff2222;
+            transform: translate(-50%, -50%) scale(1.22) !important;
+        }
+        #kill-marker {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 38px;
+            height: 38px;
+            transform: translate(-50%, -50%) scale(0.85);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.08s ease, transform 0.08s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+            z-index: 25;
+        }
+        #kill-marker .km-icon {
+            width: 100%;
+            height: 100%;
+            display: none;
+        }
+        #kill-marker.kill-body {
+            opacity: 1 !important;
+            transform: translate(-50%, -50%) scale(1.08) !important;
+            color: #cbd5e1;
+            filter: drop-shadow(0 0 5px rgba(0, 0, 0, 0.95));
+        }
+        #kill-marker.kill-body #km-skull-body {
+            display: block;
+        }
+        #kill-marker.kill-head {
+            opacity: 1 !important;
+            transform: translate(-50%, -50%) scale(1.24) !important;
+            color: #ef4444;
+            filter: drop-shadow(0 0 10px #ef4444) drop-shadow(0 0 2px #ffffff);
+        }
+        #kill-marker.kill-head #km-skull-head {
+            display: block;
+        }
+        #kill-banner {
+            position: absolute;
+            top: calc(50% + 36px);
+            left: 50%;
+            transform: translate(-50%, 4px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2px 8px;
+            background: rgba(8, 10, 14, 0.55);
+            border: none;
+            border-radius: 2px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.12s ease, transform 0.12s ease-out;
+            z-index: 24;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
+        }
+        #kill-banner.active {
+            opacity: 1;
+            transform: translate(-50%, 0);
+        }
+        #kill-banner-title {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: #f1f5f9;
+            line-height: 1.1;
+        }
+        #kill-banner.headshot #kill-banner-title {
+            color: #ef4444;
+            text-shadow: 0 0 6px rgba(239, 68, 68, 0.6), 0 1px 3px rgba(0, 0, 0, 0.95);
+        }
+        #kill-banner-sub {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 1px;
+            color: #94a3b8;
+            margin-top: 2px;
+            line-height: 1.1;
+            text-transform: uppercase;
+        }
+        #kill-banner-sub span:empty {
+            display: none;
+        }
+        #vehicle-interact-prompt {
+            display: none !important;
+        }
+        #kill-feed {
+            display: none !important;
+        }
+        #top-left-telemetry {
+            display: none !important;
+        }
+        #squad-order-banner {
+            display: none !important;
+        }
+        #bottom-left-controls {
+            display: none !important;
+        }
+        #hud-reload-state {
+            display: none !important;
+        }
+        #bottom-right-weapon {
+            position: absolute;
+            bottom: 24px;
+            right: 24px;
+            background: transparent;
+            border: none;
+            padding: 0;
+            text-align: right;
+            pointer-events: none;
+        }
+        #hud-weapon-name {
+            font-size: 10px;
+            font-weight: 600;
+            color: #94a3b8;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 2px;
+        }
+        #hud-ammo-count {
+            font-size: 26px;
+            font-weight: 700;
+            color: #f8fafc;
+            line-height: 1;
+            font-variant-numeric: tabular-nums;
+        }
+        #fpv-osd {
+            position: absolute;
+            inset: 0;
+            display: none;
+            pointer-events: none;
+            overflow: hidden;
+            background: rgba(0, 0, 0, 0.05);
+        }
+        #fpv-noise-canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            mix-blend-mode: screen;
+            opacity: 0.65;
+            image-rendering: pixelated;
+        }
+        .fpv-scanlines {
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(0, 0, 0, 0.28) 0px,
+                rgba(0, 0, 0, 0.28) 1px,
+                transparent 1px,
+                transparent 2px
+            );
+            pointer-events: none;
+            opacity: 0.85;
+        }
+        .fpv-vignette {
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at center, transparent 40%, rgba(0, 0, 0, 0.75) 100%);
+            pointer-events: none;
+        }
+        .fpv-reticle {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+        .fpv-reticle .center-dot {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 2px;
+            height: 2px;
+            background: #ffffff;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 2px rgba(255, 255, 255, 0.9);
+        }
+        .fpv-reticle .tick {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.85);
+        }
+        .fpv-reticle .tick-top {
+            top: 0;
+            left: 50%;
+            width: 1px;
+            height: 5px;
+            transform: translateX(-50%);
+        }
+        .fpv-reticle .tick-bottom {
+            bottom: 0;
+            left: 50%;
+            width: 1px;
+            height: 5px;
+            transform: translateX(-50%);
+        }
+        .fpv-reticle .tick-left {
+            left: 0;
+            top: 50%;
+            width: 5px;
+            height: 1px;
+            transform: translateY(-50%);
+        }
+        .fpv-reticle .tick-right {
+            right: 0;
+            top: 50%;
+            width: 5px;
+            height: 1px;
+            transform: translateY(-50%);
+        }
+    </style>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+            "@dimforge/rapier3d-compat": "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.14.0/+esm"
+        }
+    }
+    </script>
+    <link rel="icon" href="data:,">
+</head>
+<body>
+    <div id="viewport"></div>
+
+    <div id="loading-overlay">
+        <div class="load-bar-wrap">
+            <div id="loading-bar-fill"></div>
+        </div>
+        <div id="loading-status-text">ЗАГРУЗКА 0%</div>
+    </div>
+
+    <div id="start-panel">
+        <div class="brief-box">
+            <div class="brief-header">WAR</div>
+            <div class="brief-grid">
+                <div><b>WASD</b> Перемещение, управление техникой</div>
+                <div><b>1 - 4</b> Выбор оружия, <b>R</b> Перезарядка</div>
+                <div><b>F</b> За руль или орудие, <b>B</b> На броню</div>
+                <div><b>8, 9, 0</b> Бинт, жгут, обезболивающее</div>
+                <div><b>V, N</b> Дроны FPV и Ланцет, <b>G</b> Штурм</div>
+                <div><b>5, 6, 7</b> Гранаты Ф-1, дым, мина ТМ-62</div>
+            </div>
+            <div class="faction-buttons">
+                <button id="btn-faction-ru" class="btn-faction">ВС РФ</button>
+                <button id="btn-faction-ua" class="btn-faction">ВСУ</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="hud-layer">
+        <div id="crosshair"></div>
+        <div id="hit-marker"></div>
+        <div id="kill-marker">
+            <svg id="km-skull-body" class="km-icon" width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path fill-rule="evenodd" clip-rule="evenodd" d="M28.443 16.724C28.463 14.991 27.853 14.952 27.814 13.889C27.793 13.357 27.858 11.864 27.814 10.425C27.769 8.991 27.616 7.608 27.499 7.275C27.263 6.606 26.995 5.502 24.979 3.81C22.773 1.959 18.52 0.383996 16.159 0.344996C13.796 0.304996 11.04 1.487 8.91301 2.865C6.78701 4.243 6.27501 4.834 5.44901 6.015C4.62101 7.196 4.30601 8.023 4.50301 10.11C4.70001 12.197 4.74701 11.647 4.81801 13.575C4.87801 15.17 4.15301 15.663 4.18801 16.725C4.24001 18.312 4.83601 18.641 4.81801 19.245C4.80501 19.641 4.10901 20.138 4.18801 21.45C4.26801 22.786 4.54201 23.143 7.02301 24.6C8.63301 25.545 10.527 25.899 10.488 26.49C10.43 27.355 10.213 28.774 10.174 29.64C10.135 30.506 10.528 30.585 11.433 30.9C12.34 31.215 14.465 31.884 16.789 31.845C19.112 31.805 20.097 31.333 21.199 30.9C22.301 30.467 22.459 30.073 22.459 29.325C22.459 28.577 21.829 27.042 21.829 26.49C21.829 25.939 23.719 25.348 25.924 24.285C28.13 23.222 28.104 22.16 28.13 21.45C28.177 20.112 27.499 19.797 27.499 19.245C27.499 18.168 28.431 17.984 28.443 16.724ZM9.85801 19.874C8.75501 19.914 6.39301 19.914 6.39301 16.724C6.39301 12.305 8.75501 11.802 10.488 11.684C12.221 11.566 12.457 11.369 13.324 11.999C14.88 13.131 14.78 15.136 14.268 16.724C13.893 17.887 13.48 18.338 12.693 18.929C11.906 19.52 10.961 19.834 9.85801 19.874ZM17.104 24.914L16.67 23.306L16 23.313L15.528 24.915C13.716 24.423 12.988 23.695 13.008 22.71C13.028 21.726 13.579 20.702 14.582 19.875C15.587 19.048 15.749 18.92 16.473 18.93C17.164 18.94 17.225 19.074 17.733 19.56C18.83 20.611 19.54 21.311 19.624 22.71C19.706 24.086 18.107 24.855 17.104 24.914ZM22.773 19.874C21.67 19.834 20.726 19.52 19.938 18.929C19.151 18.338 18.686 17.902 18.363 16.724C17.956 15.241 17.753 13.131 19.309 11.999C20.175 11.369 20.411 11.566 22.144 11.684C23.875 11.802 26.239 12.305 26.239 16.724C26.239 19.914 23.876 19.914 22.773 19.874Z" fill="currentColor"/>
+            </svg>
+            <svg id="km-skull-head" class="km-icon" width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path fill-rule="evenodd" clip-rule="evenodd" d="M28.443 16.63C28.463 14.896 27.853 14.857 27.814 13.794C27.793 13.261 27.858 11.769 27.814 10.329C27.769 8.89499 27.616 7.51299 27.499 7.17899C27.263 6.50899 26.995 5.40599 24.979 3.71499C22.773 1.86299 18.52 0.288995 16.159 0.249995C13.796 0.209995 11.04 1.39199 8.91301 2.76999C6.78701 4.14699 6.27501 4.73799 5.44901 5.91999C4.62101 7.101 4.30601 7.92699 4.50301 10.015C4.70001 12.101 4.74701 11.55 4.81801 13.48C4.87801 15.074 4.15301 15.568 4.18801 16.63C4.24001 18.216 4.83601 18.547 4.81801 19.15C4.80501 19.546 4.10901 20.043 4.18801 21.355C4.26801 22.691 4.54201 23.048 7.02301 24.505C8.63301 25.45 10.527 25.804 10.488 26.394C10.43 27.259 10.213 28.679 10.174 29.544C10.135 30.411 10.528 30.489 11.433 30.804C12.34 31.12 14.465 31.788 16.789 31.749C19.112 31.71 20.097 31.237 21.199 30.804C22.301 30.372 22.459 29.978 22.459 29.23C22.459 28.482 21.829 26.947 21.829 26.394C21.829 25.843 23.719 25.253 25.924 24.189C28.13 23.126 28.104 22.064 28.13 21.355C28.177 20.017 27.499 19.701 27.499 19.15C27.499 18.074 28.431 17.891 28.443 16.63ZM16.317 3.80699C18.019 3.80699 19.399 5.18499 19.399 6.88899C19.399 8.59099 18.019 9.96899 16.317 9.96899C14.613 9.96899 13.235 8.59099 13.235 6.88899C13.235 5.18599 14.613 3.80699 16.317 3.80699ZM9.85801 19.875C8.75501 19.914 6.39301 19.914 6.39301 16.724C6.39301 12.304 8.75501 11.802 10.488 11.683C12.221 11.566 12.457 11.369 13.324 11.999C14.88 13.13 14.78 15.136 14.268 16.724C13.893 17.887 13.48 18.338 12.693 18.93C11.906 19.52 10.961 19.834 9.85801 19.875ZM17.104 24.914L16.67 23.307L16 23.313L15.528 24.915C13.716 24.423 12.988 23.694 13.008 22.71C13.028 21.726 13.579 20.702 14.582 19.876C15.587 19.048 15.749 18.921 16.473 18.931C17.164 18.941 17.225 19.074 17.733 19.56C18.83 20.611 19.54 21.312 19.624 22.71C19.706 24.086 18.107 24.855 17.104 24.914ZM22.773 19.875C21.67 19.834 20.726 19.52 19.938 18.93C19.151 18.338 18.686 17.903 18.363 16.724C17.956 15.24 17.753 13.13 19.31 12C20.176 11.369 20.412 11.566 22.145 11.684C23.876 11.803 26.24 12.305 26.24 16.725C26.239 19.914 23.876 19.914 22.773 19.875Z" fill="currentColor"/>
+            </svg>
+        </div>
+        <div id="kill-banner">
+            <div id="kill-banner-title">НЕЙТРАЛИЗОВАН</div>
+            <div id="kill-banner-sub">
+                <span id="kb-target">БОЕЦ</span>
+                <span id="kb-weapon">АК-12</span>
+                <span id="kb-dist">48м</span>
+                <span id="kb-zone">ГОЛОВА</span>
+            </div>
+        </div>
+
+        <div id="top-left-telemetry">
+            <div>Убито: <b id="hud-kills">0</b>, в голову: <b id="hud-headshots">0</b></div>
+            <div id="squad-order-banner"></div>
+        </div>
+
+        <div id="vehicle-interact-prompt"></div>
+
+        <div id="kill-feed"></div>
+
+        <div id="bottom-left-controls"></div>
+
+        <div id="bottom-right-weapon">
+            <div id="hud-weapon-name">ПАТРОНЫ</div>
+            <div id="hud-ammo-count">30 / 180</div>
+            <div id="hud-reload-state"></div>
+        </div>
+
+        <div id="fpv-osd">
+            <canvas id="fpv-noise-canvas"></canvas>
+            <div class="fpv-scanlines"></div>
+            <div class="fpv-vignette"></div>
+            <div class="fpv-reticle">
+                <div class="center-dot"></div>
+                <div class="tick tick-top"></div>
+                <div class="tick tick-bottom"></div>
+                <div class="tick tick-left"></div>
+                <div class="tick tick-right"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        if (location.protocol === 'file:') {
+            const st = document.getElementById('loading-status-text');
+            if (st) st.textContent = 'ОШИБКА: ОТКРЫТО ЧЕРЕЗ FILE:// (CORS БЛОКИРУЕТ МОДУЛИ). ЗАПУСТИТЕ START_GAME.BAT ИЛИ NPM START';
+        }
+    </script>
+    <script type="module" src="./battle_engine.js"></script>
+</body>
+</html>
